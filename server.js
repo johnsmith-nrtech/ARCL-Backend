@@ -97,6 +97,11 @@ app.use("/api/donations", donationRoutes);
 const contactRoutes = require('./routes/contactRoutes');
 app.use('/api/contact', contactRoutes);
 
+// Testimonials routes
+const testimonialRoutes = require("./routes/testimonialRoutes");
+app.use("/api/testimonials", testimonialRoutes(upload));
+
+
 
 // ================= EXAMPLE UPLOAD ENDPOINT =================
 app.post("/upload-image", upload.single("image"), (req, res) => {

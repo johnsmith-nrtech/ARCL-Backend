@@ -15,7 +15,7 @@ app.use(
       "http://localhost:3000",
       "https://arcl-frontend.vercel.app",
       "https://arcl-frontend-lake.vercel.app",
-      "https://arcl.netlify.app/",
+      "https://arcl.netlify.app",
       "arcl.org.pk",
       "www.arcl.org.pk",
     ],

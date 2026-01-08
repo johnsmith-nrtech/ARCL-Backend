@@ -12,7 +12,7 @@ if (!fs.existsSync(uploadDir)) {
 // GET /api/gallery
 exports.getGallery = async (req, res) => {
   try {
-    const gallery = await Gallery.find().sort({ createdAt: -1 }); // latest first
+    const gallery = await Gallery.find().sort({ createdAt: -1 }); 
     res.json(gallery);
   } catch (err) {
     console.error(err);

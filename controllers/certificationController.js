@@ -2,38 +2,72 @@ const Certification = require("../models/Certification");
 const path = require("path");
 const fs = require("fs");
 
-// GET all certifications
+// helper: safe unlink
+const safeUnlink = (filePath) => {
+  if (!filePath) return;
+  const fullPath = path.join(process.cwd(), "public", filePath);
+  if (fs.existsSync(fullPath)) {
+    fs.unlink(fullPath, () => {});
+  }
+};
+
+// ================= GET ALL =================
 exports.getAll = async (req, res) => {
   try {
-    const certifications = await Certification.find();
+    const certifications = await Certification.find().sort({ createdAt: -1 });
     res.json(certifications);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// GET certification by ID
+// ================= GET BY ID =================
 exports.getById = async (req, res) => {
   try {
     const cert = await Certification.findById(req.params.id);
-    if (!cert) return res.status(404).json({ error: "Certification not found" });
+    if (!cert) {
+      return res.status(404).json({ error: "Certification not found" });
+    }
     res.json(cert);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// CREATE certification
+// ================= CREATE =================
 exports.create = async (req, res) => {
   try {
-    const { title } = req.body;
-    const image = req.files?.image ? `/uploads/${req.files.image[0].filename}` : "";
-    const pdf = req.files?.pdf ? `/uploads/${req.files.pdf[0].filename}` : "";
+    const { title, imageUrl, pdfUrl } = req.body;
 
-    if (!title || !image || !pdf) return res.status(400).json({ error: "All fields required" });
+    if (!title) {
+      return res.status(400).json({ error: "Title is required" });
+    }
 
-    const newCert = new Certification({ title, image, pdf });
-    await newCert.save();
+    // image: URL OR uploaded file
+    let image = "";
+    if (imageUrl) {
+      image = imageUrl;
+    } else if (req.files?.image?.[0]) {
+      image = `/uploads/${req.files.image[0].filename}`;
+    }
+
+    // pdf: URL OR uploaded file
+    let pdf = "";
+    if (pdfUrl) {
+      pdf = pdfUrl;
+    } else if (req.files?.pdf?.[0]) {
+      pdf = `/uploads/${req.files.pdf[0].filename}`;
+    }
+
+    if (!image || !pdf) {
+      return res.status(400).json({ error: "Image and PDF are required" });
+    }
+
+    const newCert = await Certification.create({
+      title,
+      image,
+      pdf,
+    });
 
     res.status(201).json(newCert);
   } catch (err) {
@@ -41,49 +75,75 @@ exports.create = async (req, res) => {
   }
 };
 
-// UPDATE certification
+// ================= UPDATE =================
 exports.update = async (req, res) => {
   try {
-    const { title } = req.body;
+    const { title, imageUrl, pdfUrl } = req.body;
     const cert = await Certification.findById(req.params.id);
-    if (!cert) return res.status(404).json({ error: "Certification not found" });
 
-    // Replace image if new uploaded
-    if (req.files?.image) {
-      if (cert.image) {
-        fs.unlink(path.join(process.cwd(), "public/uploads", path.basename(cert.image)), () => {});
+    if (!cert) {
+      return res.status(404).json({ error: "Certification not found" });
+    }
+
+    // ---------- IMAGE ----------
+    if (imageUrl) {
+      // delete old local image
+      if (cert.image?.startsWith("/uploads")) {
+        safeUnlink(cert.image);
+      }
+      cert.image = imageUrl;
+    } 
+    else if (req.files?.image?.[0]) {
+      if (cert.image?.startsWith("/uploads")) {
+        safeUnlink(cert.image);
       }
       cert.image = `/uploads/${req.files.image[0].filename}`;
     }
 
-    // Replace PDF if new uploaded
-    if (req.files?.pdf) {
-      if (cert.pdf) {
-        fs.unlink(path.join(process.cwd(), "public/uploads", path.basename(cert.pdf)), () => {});
+    // ---------- PDF ----------
+    if (pdfUrl) {
+      if (cert.pdf?.startsWith("/uploads")) {
+        safeUnlink(cert.pdf);
+      }
+      cert.pdf = pdfUrl;
+    } 
+    else if (req.files?.pdf?.[0]) {
+      if (cert.pdf?.startsWith("/uploads")) {
+        safeUnlink(cert.pdf);
       }
       cert.pdf = `/uploads/${req.files.pdf[0].filename}`;
     }
 
-    cert.title = title || cert.title;
-    await cert.save();
+    // ---------- TITLE ----------
+    if (title) {
+      cert.title = title;
+    }
 
+    await cert.save();
     res.json(cert);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// DELETE certification
+// ================= DELETE =================
 exports.delete = async (req, res) => {
   try {
     const cert = await Certification.findById(req.params.id);
-    if (!cert) return res.status(404).json({ error: "Certification not found" });
+    if (!cert) {
+      return res.status(404).json({ error: "Certification not found" });
+    }
 
-    if (cert.image) fs.unlink(path.join(process.cwd(), "public/uploads", path.basename(cert.image)), () => {});
-    if (cert.pdf) fs.unlink(path.join(process.cwd(), "public/uploads", path.basename(cert.pdf)), () => {});
+    if (cert.image?.startsWith("/uploads")) {
+      safeUnlink(cert.image);
+    }
+
+    if (cert.pdf?.startsWith("/uploads")) {
+      safeUnlink(cert.pdf);
+    }
 
     await cert.deleteOne();
-    res.json({ message: "Certification deleted" });
+    res.json({ message: "Certification deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

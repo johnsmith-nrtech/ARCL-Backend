@@ -1,150 +1,129 @@
 const Certification = require("../models/Certification");
-const path = require("path");
-const fs = require("fs");
+const cloudinary = require("../config/cloudinary");
 
-// helper: safe unlink
-const safeUnlink = (filePath) => {
-  if (!filePath) return;
-  const fullPath = path.join(process.cwd(), "public", filePath);
-  if (fs.existsSync(fullPath)) {
-    fs.unlink(fullPath, () => {});
-  }
+// upload helper
+const uploadToCloudinary = (file, folder) => {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_stream(
+      { folder, resource_type: "auto" },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    ).end(file.buffer);
+  });
 };
 
-// ================= GET ALL =================
+// GET all
 exports.getAll = async (req, res) => {
   try {
-    const certifications = await Certification.find().sort({ createdAt: -1 });
+    const certifications = await Certification.find();
     res.json(certifications);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// ================= GET BY ID =================
+// GET by ID
 exports.getById = async (req, res) => {
   try {
     const cert = await Certification.findById(req.params.id);
-    if (!cert) {
-      return res.status(404).json({ error: "Certification not found" });
-    }
+    if (!cert) return res.status(404).json({ error: "Certification not found" });
     res.json(cert);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// ================= CREATE =================
+// CREATE
 exports.create = async (req, res) => {
   try {
-    const { title, imageUrl, pdfUrl } = req.body;
+    const { title } = req.body;
 
-    if (!title) {
-      return res.status(400).json({ error: "Title is required" });
+    if (!title || !req.files?.image || !req.files?.pdf) {
+      return res.status(400).json({ error: "Title, image & pdf required" });
     }
 
-    // image: URL OR uploaded file
-    let image = "";
-    if (imageUrl) {
-      image = imageUrl;
-    } else if (req.files?.image?.[0]) {
-      image = `/uploads/${req.files.image[0].filename}`;
-    }
+    const imageUpload = await uploadToCloudinary(
+      req.files.image[0],
+      "certifications/images"
+    );
 
-    // pdf: URL OR uploaded file
-    let pdf = "";
-    if (pdfUrl) {
-      pdf = pdfUrl;
-    } else if (req.files?.pdf?.[0]) {
-      pdf = `/uploads/${req.files.pdf[0].filename}`;
-    }
+    const pdfUpload = await uploadToCloudinary(
+      req.files.pdf[0],
+      "certifications/pdfs"
+    );
 
-    if (!image || !pdf) {
-      return res.status(400).json({ error: "Image and PDF are required" });
-    }
-
-    const newCert = await Certification.create({
+    const cert = await Certification.create({
       title,
-      image,
-      pdf,
+      image: imageUpload.secure_url,
+      imagePublicId: imageUpload.public_id,
+      pdf: pdfUpload.secure_url,
+      pdfPublicId: pdfUpload.public_id,
     });
 
-    res.status(201).json(newCert);
+    res.status(201).json(cert);
+
   } catch (err) {
+    console.error("CREATE CERT ERROR 👉", err);
     res.status(500).json({ error: err.message });
   }
 };
 
-// ================= UPDATE =================
+// UPDATE
 exports.update = async (req, res) => {
   try {
-    const { title, imageUrl, pdfUrl } = req.body;
     const cert = await Certification.findById(req.params.id);
+    if (!cert) return res.status(404).json({ error: "Certification not found" });
 
-    if (!cert) {
-      return res.status(404).json({ error: "Certification not found" });
+    if (req.body.title) cert.title = req.body.title;
+
+    if (req.files?.image) {
+      if (cert.imagePublicId) {
+        await cloudinary.uploader.destroy(cert.imagePublicId);
+      }
+      const img = await uploadToCloudinary(req.files.image[0], "certifications/images");
+      cert.image = img.secure_url;
+      cert.imagePublicId = img.public_id;
     }
 
-    // ---------- IMAGE ----------
-    if (imageUrl) {
-      // delete old local image
-      if (cert.image?.startsWith("/uploads")) {
-        safeUnlink(cert.image);
+    if (req.files?.pdf) {
+      if (cert.pdfPublicId) {
+        await cloudinary.uploader.destroy(cert.pdfPublicId, { resource_type: "raw" });
       }
-      cert.image = imageUrl;
-    } 
-    else if (req.files?.image?.[0]) {
-      if (cert.image?.startsWith("/uploads")) {
-        safeUnlink(cert.image);
-      }
-      cert.image = `/uploads/${req.files.image[0].filename}`;
-    }
-
-    // ---------- PDF ----------
-    if (pdfUrl) {
-      if (cert.pdf?.startsWith("/uploads")) {
-        safeUnlink(cert.pdf);
-      }
-      cert.pdf = pdfUrl;
-    } 
-    else if (req.files?.pdf?.[0]) {
-      if (cert.pdf?.startsWith("/uploads")) {
-        safeUnlink(cert.pdf);
-      }
-      cert.pdf = `/uploads/${req.files.pdf[0].filename}`;
-    }
-
-    // ---------- TITLE ----------
-    if (title) {
-      cert.title = title;
+      const pdf = await uploadToCloudinary(req.files.pdf[0], "certifications/pdfs");
+      cert.pdf = pdf.secure_url;
+      cert.pdfPublicId = pdf.public_id;
     }
 
     await cert.save();
     res.json(cert);
+
   } catch (err) {
+    console.error("UPDATE CERT ERROR 👉", err);
     res.status(500).json({ error: err.message });
   }
 };
 
-// ================= DELETE =================
+// DELETE
 exports.delete = async (req, res) => {
   try {
     const cert = await Certification.findById(req.params.id);
-    if (!cert) {
-      return res.status(404).json({ error: "Certification not found" });
+    if (!cert) return res.status(404).json({ error: "Certification not found" });
+
+    if (cert.imagePublicId) {
+      await cloudinary.uploader.destroy(cert.imagePublicId);
     }
 
-    if (cert.image?.startsWith("/uploads")) {
-      safeUnlink(cert.image);
-    }
-
-    if (cert.pdf?.startsWith("/uploads")) {
-      safeUnlink(cert.pdf);
+    if (cert.pdfPublicId) {
+      await cloudinary.uploader.destroy(cert.pdfPublicId, { resource_type: "raw" });
     }
 
     await cert.deleteOne();
-    res.json({ message: "Certification deleted successfully" });
+    res.json({ message: "Certification deleted" });
+
   } catch (err) {
+    console.error("DELETE CERT ERROR 👉", err);
     res.status(500).json({ error: err.message });
   }
 };

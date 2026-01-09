@@ -1,6 +1,17 @@
 const Governing = require("../models/GoverningMember");
-const path = require("path");
-const fs = require("fs");
+const cloudinary = require("../config/cloudinary");
+
+// Helper function to upload image to Cloudinary
+const uploadToCloudinary = (file, folder) =>
+  new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_stream(
+      { folder, resource_type: "image" },
+      (err, result) => {
+        if (err) reject(err);
+        else resolve(result);
+      }
+    ).end(file.buffer);
+  });
 
 // GET all members
 exports.getAll = async (req, res) => {
@@ -27,11 +38,20 @@ exports.getById = async (req, res) => {
 exports.create = async (req, res) => {
   try {
     const { name, position } = req.body;
-    const image = req.file ? `/uploads/${req.file.filename}` : "";
 
-    const newMember = new Governing({ name, position, image });
+    if (!name || !position || !req.file)
+      return res.status(400).json({ error: "Name, position & image required" });
+
+    const imageUpload = await uploadToCloudinary(req.file, "governing-members");
+
+    const newMember = new Governing({
+      name,
+      position,
+      image: imageUpload.secure_url,
+      imagePublicId: imageUpload.public_id,
+    });
+
     await newMember.save();
-
     res.status(201).json(newMember);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -45,27 +65,29 @@ exports.update = async (req, res) => {
     const member = await Governing.findById(req.params.id);
     if (!member) return res.status(404).json({ error: "Member not found" });
 
-    if (req.file) {
-      if (member.image) {
-        const oldImagePath = path.join(
-          process.cwd(),
-          "public/uploads",
-          path.basename(member.image)
-        );
-        fs.unlink(oldImagePath, () => {});
-      }
-      member.image = `/uploads/${req.file.filename}`;
-    }
+    // Update text fields
+    if (name) member.name = name;
+    if (position) member.position = position;
 
-    member.name = name || member.name;
-    member.position = position || member.position;
+    // Update image only if a new file is uploaded
+    if (req.file) {
+      if (member.imagePublicId) {
+        await cloudinary.uploader.destroy(member.imagePublicId, { resource_type: "image" });
+      }
+      const img = await uploadToCloudinary(req.file, "governing-members");
+      member.image = img.secure_url;
+      member.imagePublicId = img.public_id;
+    }
 
     await member.save();
     res.json(member);
   } catch (err) {
+    console.error("UPDATE GOVERNING MEMBER ERROR 👉", err);
     res.status(500).json({ error: err.message });
   }
 };
+
+
 
 // DELETE member
 exports.delete = async (req, res) => {
@@ -73,13 +95,8 @@ exports.delete = async (req, res) => {
     const member = await Governing.findById(req.params.id);
     if (!member) return res.status(404).json({ error: "Member not found" });
 
-    if (member.image) {
-      const imagePath = path.join(
-        process.cwd(),
-        "public/uploads",
-        path.basename(member.image)
-      );
-      fs.unlink(imagePath, () => {});
+    if (member.imagePublicId) {
+      await cloudinary.uploader.destroy(member.imagePublicId, { resource_type: "image" });
     }
 
     await member.deleteOne();

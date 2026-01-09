@@ -1,8 +1,19 @@
 const Executive = require("../models/ExecutiveMember");
-const path = require("path");
-const fs = require("fs");
+const cloudinary = require("../config/cloudinary");
 
-// GET all members
+// helper
+const uploadToCloudinary = (file, folder) =>
+  new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_stream(
+      { folder, resource_type: "image" },
+      (err, result) => {
+        if (err) reject(err);
+        else resolve(result);
+      }
+    ).end(file.buffer);
+  });
+
+// GET all
 exports.getAll = async (req, res) => {
   try {
     const members = await Executive.find();
@@ -12,7 +23,7 @@ exports.getAll = async (req, res) => {
   }
 };
 
-// GET member by ID
+// GET by ID
 exports.getById = async (req, res) => {
   try {
     const member = await Executive.findById(req.params.id);
@@ -23,68 +34,72 @@ exports.getById = async (req, res) => {
   }
 };
 
-// CREATE member
+// CREATE
 exports.create = async (req, res) => {
   try {
     const { name, position } = req.body;
-    const image = req.file ? `/uploads/${req.file.filename}` : "";
+    if (!name || !position || !req.file)
+      return res.status(400).json({ error: "Name, position & image required" });
 
-    const newMember = new Executive({ name, position, image });
-    await newMember.save();
+    const imageUpload = await uploadToCloudinary(req.file, "executive-members");
 
-    res.status(201).json(newMember);
+    const member = await Executive.create({
+      name,
+      position,
+      image: imageUpload.secure_url,
+      imagePublicId: imageUpload.public_id,
+    });
+
+    res.status(201).json(member);
   } catch (err) {
+    console.error("CREATE EXECUTIVE ERROR 👉", err);
     res.status(500).json({ error: err.message });
   }
 };
 
-// UPDATE member
+// UPDATE
 exports.update = async (req, res) => {
   try {
-    const { name, position } = req.body;
     const member = await Executive.findById(req.params.id);
     if (!member) return res.status(404).json({ error: "Member not found" });
 
-    if (req.file) {
-      if (member.image) {
-        const oldImagePath = path.join(
-          process.cwd(),
-          "public/uploads",
-          path.basename(member.image)
-        );
-        fs.unlink(oldImagePath, () => {});
-      }
-      member.image = `/uploads/${req.file.filename}`;
-    }
+    // Update text fields
+    if (req.body.name) member.name = req.body.name;
+    if (req.body.position) member.position = req.body.position;
 
-    member.name = name || member.name;
-    member.position = position || member.position;
+    // Update image only if a new file is uploaded
+    if (req.file) {
+      if (member.imagePublicId) {
+        await cloudinary.uploader.destroy(member.imagePublicId, { resource_type: "image" });
+      }
+
+      const img = await uploadToCloudinary(req.file, "executive-members");
+      member.image = img.secure_url;
+      member.imagePublicId = img.public_id;
+    }
 
     await member.save();
     res.json(member);
   } catch (err) {
+    console.error("UPDATE EXECUTIVE ERROR 👉", err);
     res.status(500).json({ error: err.message });
   }
 };
 
-// DELETE member
+// DELETE
 exports.delete = async (req, res) => {
   try {
     const member = await Executive.findById(req.params.id);
     if (!member) return res.status(404).json({ error: "Member not found" });
 
-    if (member.image) {
-      const imagePath = path.join(
-        process.cwd(),
-        "public/uploads",
-        path.basename(member.image)
-      );
-      fs.unlink(imagePath, () => {});
+    if (member.imagePublicId) {
+      await cloudinary.uploader.destroy(member.imagePublicId);
     }
 
     await member.deleteOne();
     res.json({ message: "Member deleted" });
   } catch (err) {
+    console.error("DELETE EXECUTIVE ERROR 👉", err);
     res.status(500).json({ error: err.message });
   }
 };

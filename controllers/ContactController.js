@@ -31,17 +31,15 @@ exports.submitContactForm = async (req, res) => {
 
     // 3️⃣ SMTP Transporter (TLS for cloud)
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST, // box2135.bluehost.com
-      port: 587,                   // Changed from 465 to 587
-      secure: false,               // false for TLS
+      host: process.env.SMTP_HOST, 
+      port: Number(process.env.SMTP_PORT), 
+      secure: true, 
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_APP_PASSWORD,
       },
-      tls: {
-        rejectUnauthorized: false, // allow self-signed certs
-      },
     });
+
 
     // 4️⃣ Send Email
     await transporter.sendMail({

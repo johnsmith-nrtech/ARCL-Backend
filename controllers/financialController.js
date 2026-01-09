@@ -1,6 +1,18 @@
 const FinancialReport = require("../models/FinancialReport");
-const path = require("path");
-const fs = require("fs");
+const cloudinary = require("../config/cloudinary");
+
+// helper function to upload PDF to Cloudinary
+const uploadToCloudinary = (file, folder) => {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_stream(
+      { folder, resource_type: "raw" }, // PDF is raw file
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      }
+    ).end(file.buffer);
+  });
+};
 
 // GET all reports
 exports.getAll = async (req, res) => {
@@ -29,12 +41,19 @@ exports.create = async (req, res) => {
     const { title } = req.body;
     if (!req.file) return res.status(400).json({ error: "PDF is required" });
 
-    const pdf = `/uploads/${req.file.filename}`;
-    const newReport = new FinancialReport({ title, pdf });
+    // Upload PDF to Cloudinary
+    const pdfUpload = await uploadToCloudinary(req.file, "financial_reports");
+
+    const newReport = new FinancialReport({
+      title,
+      pdf: pdfUpload.secure_url,
+      pdfPublicId: pdfUpload.public_id,
+    });
     await newReport.save();
 
     res.status(201).json(newReport);
   } catch (err) {
+    console.error("CREATE REPORT ERROR 👉", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -48,11 +67,13 @@ exports.update = async (req, res) => {
 
     // Replace PDF if new file uploaded
     if (req.file) {
-      if (report.pdf) {
-        const oldPath = path.join(process.cwd(), "public/uploads", path.basename(report.pdf));
-        fs.unlink(oldPath, () => {});
+      if (report.pdfPublicId) {
+        await cloudinary.uploader.destroy(report.pdfPublicId, { resource_type: "raw" });
       }
-      report.pdf = `/uploads/${req.file.filename}`;
+
+      const pdfUpload = await uploadToCloudinary(req.file, "financial_reports");
+      report.pdf = pdfUpload.secure_url;
+      report.pdfPublicId = pdfUpload.public_id;
     }
 
     report.title = title || report.title;
@@ -60,6 +81,7 @@ exports.update = async (req, res) => {
 
     res.json(report);
   } catch (err) {
+    console.error("UPDATE REPORT ERROR 👉", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -70,14 +92,14 @@ exports.delete = async (req, res) => {
     const report = await FinancialReport.findById(req.params.id);
     if (!report) return res.status(404).json({ error: "Report not found" });
 
-    if (report.pdf) {
-      const pdfPath = path.join(process.cwd(), "public/uploads", path.basename(report.pdf));
-      fs.unlink(pdfPath, () => {});
+    if (report.pdfPublicId) {
+      await cloudinary.uploader.destroy(report.pdfPublicId, { resource_type: "raw" });
     }
 
     await report.deleteOne();
     res.json({ message: "Report deleted successfully" });
   } catch (err) {
+    console.error("DELETE REPORT ERROR 👉", err);
     res.status(500).json({ error: err.message });
   }
 };

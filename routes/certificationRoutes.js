@@ -1,21 +1,35 @@
 const express = require("express");
 const router = express.Router();
-const multer = require("multer");
-const CertificationController = require("../controllers/certificationController");
+const upload = require("../middleware/upload"); 
+const CertificationController = require("../controllers/CertificationController");
 
-// Multer setup
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "public/uploads"),
-  filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname),
-});
-
-const upload = multer({ storage });
-
-// Routes
+// GET all certifications
 router.get("/", CertificationController.getAll);
+
+// GET certification by ID
 router.get("/:id", CertificationController.getById);
-router.post("/", upload.fields([{ name: "image" }, { name: "pdf" }]), CertificationController.create);
-router.put("/:id", upload.fields([{ name: "image" }, { name: "pdf" }]), CertificationController.update);
+
+// CREATE certification
+router.post(
+  "/",
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "pdf", maxCount: 1 },
+  ]),
+  CertificationController.create
+);
+
+// UPDATE certification
+router.put(
+  "/:id",
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "pdf", maxCount: 1 },
+  ]),
+  CertificationController.update
+);
+
+// DELETE certification
 router.delete("/:id", CertificationController.delete);
 
 module.exports = router;

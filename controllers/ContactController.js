@@ -29,17 +29,19 @@ exports.submitContactForm = async (req, res) => {
       .replace(/{{date}}/g, now.toLocaleDateString())
       .replace(/{{time}}/g, now.toLocaleTimeString());
 
-    // 3️⃣ SMTP Transporter (TLS for cloud)
+    // 3️⃣ SMTP Transporter (Bluehost SSL)
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST, 
       port: Number(process.env.SMTP_PORT), 
-      secure: true, 
+      secure: Number(process.env.SMTP_PORT) === 465,
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_APP_PASSWORD,
+        user: process.env.SMTP_USER, 
+        pass: process.env.SMTP_PASS, 
       },
     });
 
+    // ✅ SMTP verify (debug)
+    await transporter.verify();
 
     // 4️⃣ Send Email
     await transporter.sendMail({
@@ -60,7 +62,7 @@ exports.submitContactForm = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Email sending failed",
-      error: error.message, 
+      error: error.message,
     });
   }
 };

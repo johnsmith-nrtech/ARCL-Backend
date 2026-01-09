@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const upload = require("../middleware/upload"); 
-const CertificationController = require("../controllers/CertificationController");
+const CertificationController = require("../controllers/certificationController");
 
 // GET all certifications
 router.get("/", CertificationController.getAll);

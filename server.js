@@ -97,6 +97,11 @@ app.use("/api/donations", donationRoutes);
 const contactRoutes = require('./routes/contactRoutes');
 app.use('/api/contact', contactRoutes);
 
+// Appointment Routes
+const appointmentRoutes = require('./routes/appointmentRoutes');
+app.use('/api/appointment', appointmentRoutes);
+
+
 // Testimonials routes
 const testimonialRoutes = require("./routes/testimonialRoutes");
 app.use("/api/testimonials", testimonialRoutes(upload));

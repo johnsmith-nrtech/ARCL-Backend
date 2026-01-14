@@ -1,59 +1,97 @@
-const nodemailer = require("nodemailer");
+// controllers/AppointmentController.js
+const Appointment = require('../models/Appointment');
+const nodemailer = require('nodemailer');
+const fs = require('fs').promises;
+const path = require('path');
 
-// POST: /api/appointment
-exports.submitAppointment = async (req, res) => {
+exports.submitAppointmentForm = async (req, res) => {
   try {
-    const {
+    let {
+      parentName,
+      email,
+      phone = "Not Provided",
+      childName = "",
+      childAge,
+      preferredDate,
+      preferredTime = "",
+      message = "",
+      subject,
+    } = req.body;
+
+    // Set default subject if missing
+    if (!subject || subject.trim() === "") {
+      subject = "Appointment Request";
+    }
+
+    // Sanitize numeric/date fields
+    const sanitizedChildAge = isNaN(Number(childAge)) ? null : Number(childAge);
+    const sanitizedDate = preferredDate && preferredDate !== "N/A" ? new Date(preferredDate) : null;
+
+    // 1️⃣ Save to MongoDB
+    await Appointment.create({
       parentName,
       email,
       phone,
       childName,
-      childAge,
-      preferredDate,
+      childAge: sanitizedChildAge,
+      preferredDate: sanitizedDate,
       preferredTime,
       message,
-    } = req.body;
+      subject,
+    });
 
-    // Simple validation
-    if (!parentName || !email || !phone || !preferredDate || !preferredTime) {
-      return res.status(400).json({ error: "All required fields must be filled." });
-    }
+    // 2️⃣ Load Email Template
+    const templatePath = path.join(__dirname, '../templates/appointment-notification.html');
+    let htmlContent = await fs.readFile(templatePath, 'utf8');
 
-    // Create transporter
+    const now = new Date();
+    htmlContent = htmlContent
+      .replace(/{{parentName}}/g, parentName || "N/A")
+      .replace(/{{email}}/g, email || "N/A")
+      .replace(/{{phone}}/g, phone || "N/A")
+      .replace(/{{childName}}/g, childName || "N/A")
+      .replace(/{{childAge}}/g, sanitizedChildAge ?? "N/A")
+      .replace(/{{preferredDate}}/g, sanitizedDate ? sanitizedDate.toLocaleDateString() : "N/A")
+      .replace(/{{preferredTime}}/g, preferredTime || "N/A")
+      .replace(/{{message}}/g, message.replace(/\n/g, '<br>'))
+      .replace(/{{date}}/g, now.toLocaleDateString())
+      .replace(/{{time}}/g, now.toLocaleTimeString());
+
+    // 3️⃣ SMTP Transporter (same as ContactController)
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST, 
-      port: process.env.SMTP_PORT || 465, 
-      secure: true, 
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      secure: Number(process.env.SMTP_PORT) === 465,
       auth: {
-        user: process.env.SMTP_USER, 
-        pass: process.env.SMTP_PASS, 
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
       },
     });
 
-    // Email content
-    const mailOptions = {
-      from: `"${parentName}" <${email}>`,
-      to: process.env.CONTACT_RECEIVER_EMAIL, 
-      subject: "New Appointment Request",
-      html: `
-        <h2>New Appointment Request</h2>
-        <p><strong>Parent Name:</strong> ${parentName}</p>
-        <p><strong>Phone:</strong> ${phone}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Child Name:</strong> ${childName || "-"}</p>
-        <p><strong>Child Age:</strong> ${childAge || "-"}</p>
-        <p><strong>Preferred Date:</strong> ${preferredDate}</p>
-        <p><strong>Preferred Time:</strong> ${preferredTime}</p>
-        <p><strong>Message:</strong> ${message || "-"}</p>
-      `,
-    };
+    // Verify SMTP
+    await transporter.verify();
 
-    // Send email
-    await transporter.sendMail(mailOptions);
+    // 4️⃣ Send Email
+    await transporter.sendMail({
+      from: `"Appointment Request" <${process.env.SMTP_USER}>`,
+      to: process.env.SMTP_USER, 
+      replyTo: email,
+      subject: `New Message: ${subject}`,
+      html: htmlContent,
+    });
 
-    return res.status(200).json({ message: "Appointment request sent successfully!" });
+    // 5️⃣ Return success
+    return res.status(201).json({
+      success: true,
+      message: "Appointment request sent successfully",
+    });
+
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Something went wrong while sending the email." });
+    console.error("APPOINTMENT EMAIL ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to send appointment request",
+      error: error.message,
+    });
   }
 };

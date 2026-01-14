@@ -9,13 +9,7 @@ const contactSchema = new mongoose.Schema({
   subject: { type: String, default: "" },
   message: { type: String, default: "" },
   formType: { type: String, default: "ContactUs" }, // ContactUs or Appointment
-
-  // Appointment-specific fields
-  childName: { type: String, default: "" },
-  childAge: { type: Number, min: 1, max: 18, default: null },
-  preferredDate: { type: Date, default: null },
-  preferredTime: { type: String, default: "" }, // Morning / Afternoon
-
+  
   createdAt: { type: Date, default: Date.now }
 });
 

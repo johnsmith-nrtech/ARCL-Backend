@@ -29,18 +29,18 @@ exports.submitContactForm = async (req, res) => {
       .replace(/{{date}}/g, now.toLocaleDateString())
       .replace(/{{time}}/g, now.toLocaleTimeString());
 
-    // 3️⃣ SMTP Transporter (Bluehost SSL)
+    // 3️⃣ SMTP Transporter (Hostinger)
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST, 
-      port: Number(process.env.SMTP_PORT), 
-      secure: Number(process.env.SMTP_PORT) === 465,
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      secure: true, // MUST be true for 465
       auth: {
-        user: process.env.SMTP_USER, 
-        pass: process.env.SMTP_PASS, 
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
       },
     });
 
-    // ✅ SMTP verify (debug)
+    // ✅ Verify SMTP
     await transporter.verify();
 
     // 4️⃣ Send Email

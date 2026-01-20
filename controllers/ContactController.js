@@ -30,24 +30,30 @@ exports.submitContactForm = async (req, res) => {
       .replace(/{{time}}/g, now.toLocaleTimeString());
 
     // 3️⃣ SMTP Transporter (Hostinger)
+    // Use port 465 for SSL or 587 for TLS/STARTTLS
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: true, // MUST be true for 465
+      port: Number(process.env.SMTP_PORT) || 465,
+      secure: process.env.SMTP_PORT == 465, // true for 465, false for 587
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      tls: {
+        // Do not fail on invalid certs
+        rejectUnauthorized: false,
+      },
+      logger: true,
     });
 
-    // ✅ Verify SMTP
+    // ✅ Verify SMTP connection
     await transporter.verify();
 
     // 4️⃣ Send Email
     await transporter.sendMail({
       from: `"Website Contact Form" <${process.env.SMTP_USER}>`,
-      to: process.env.SMTP_USER,
-      replyTo: email,
+      to: process.env.SMTP_USER, // send to yourself
+      replyTo: email, // reply goes to sender
       subject: `New Message: ${subject}`,
       html: htmlContent,
     });

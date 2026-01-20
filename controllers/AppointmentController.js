@@ -1,8 +1,11 @@
 // controllers/AppointmentController.js
 const Appointment = require('../models/Appointment');
-const nodemailer = require('nodemailer');
 const fs = require('fs').promises;
 const path = require('path');
+const { Resend } = require('resend'); // ✅ Correct import
+
+// Initialize Resend
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 exports.submitAppointmentForm = async (req, res) => {
   try {
@@ -18,13 +21,13 @@ exports.submitAppointmentForm = async (req, res) => {
       subject,
     } = req.body;
 
-    // Set default subject if missing
+    // Default subject
     if (!subject || subject.trim() === "") {
       subject = "Appointment Request";
     }
 
     // Sanitize numeric/date fields
-    const sanitizedChildAge = isNaN(Number(childAge)) ? null : Number(childAge);
+    const sanitizedChildAge = isNaN(Number(childAge)) ? "N/A" : Number(childAge);
     const sanitizedDate = preferredDate && preferredDate !== "N/A" ? new Date(preferredDate) : null;
 
     // 1️⃣ Save to MongoDB
@@ -50,37 +53,25 @@ exports.submitAppointmentForm = async (req, res) => {
       .replace(/{{email}}/g, email || "N/A")
       .replace(/{{phone}}/g, phone || "N/A")
       .replace(/{{childName}}/g, childName || "N/A")
-      .replace(/{{childAge}}/g, sanitizedChildAge ?? "N/A")
+      .replace(/{{childAge}}/g, sanitizedChildAge)
       .replace(/{{preferredDate}}/g, sanitizedDate ? sanitizedDate.toLocaleDateString() : "N/A")
       .replace(/{{preferredTime}}/g, preferredTime || "N/A")
       .replace(/{{message}}/g, message.replace(/\n/g, '<br>'))
       .replace(/{{date}}/g, now.toLocaleDateString())
       .replace(/{{time}}/g, now.toLocaleTimeString());
 
-    // 3️⃣ SMTP Transporter (same as ContactController)
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    // Verify SMTP
-    await transporter.verify();
-
-    // 4️⃣ Send Email
-    await transporter.sendMail({
-      from: `"Appointment Request" <${process.env.SMTP_USER}>`,
-      to: process.env.SMTP_USER, 
-      replyTo: email,
-      subject: `New Message: ${subject}`,
+    // 3️⃣ Send Email via Resend
+    const response = await resend.emails.send({
+      from: `Appointment Form <${process.env.RESEND_FROM_EMAIL}>`,
+      to: process.env.RESEND_TO_EMAIL, // Admin email
+      subject: `New Appointment Request: ${subject}`,
       html: htmlContent,
+      reply_to: email, // so admin can reply directly
     });
 
-    // 5️⃣ Return success
+    console.log("Resend Response:", response);
+
+    // 4️⃣ Return success
     return res.status(201).json({
       success: true,
       message: "Appointment request sent successfully",

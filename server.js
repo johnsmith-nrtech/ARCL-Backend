@@ -16,6 +16,8 @@ app.use(
       "https://arcl-frontend.vercel.app",
       "https://arcl-frontend-lake.vercel.app",
       "https://arcl.netlify.app",
+      "https://arcl.com.pk",
+      "https://www.arcl.com.pk",
       "https://arcl.org.pk",
       "https://www.arcl.org.pk",
     ],

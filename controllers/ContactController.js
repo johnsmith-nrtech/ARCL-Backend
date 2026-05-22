@@ -39,6 +39,8 @@ exports.submitContactForm = async (req, res) => {
 
     console.log("Resend Response:", response);
 
+    console.log(`✅ Email sent successfully to ${process.env.RESEND_TO_EMAIL} from ${name} (${email})`);
+
     res.status(201).json({
       success: true,
       message: "Message sent successfully",
